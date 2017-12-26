@@ -1,165 +1,71 @@
-from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
-import cgi
-
-# import CRUD Operations from Lesson 1 ##
-from database_setup import Base, Restaurant, MenuItem
+from flask import Flask, render_template, request, redirect, url_for, flash
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from database_setup import Base, Restaurant, MenuItem
 
-# Create session and connect to DB ##
+app = Flask(__name__)
+
 engine = create_engine('sqlite:///restaurantmenu.db')
 Base.metadata.bind = engine
+
 DBSession = sessionmaker(bind=engine)
 session = DBSession()
 
 
-class webServerHandler(BaseHTTPRequestHandler):
-
-    def do_GET(self):
-        try:
-            # Objective 3 Step 2 - Create /restaurants/new page
-            if self.path.endswith("/restaurants/new"):
-                self.send_response(200)
-                self.send_header('Content-type', 'text/html')
-                self.end_headers()
-                output = ""
-                output += "<html><body>"
-                output += "<h1>Make a New Restaurant</h1>"
-                output += "<form method = 'POST' enctype='multipart/form-data' action = '/restaurants/new'>"
-                output += "<input name = 'newRestaurantName' type = 'text' placeholder = 'New Restaurant Name' > "
-                output += "<input type='submit' value='Create'>"
-                output += "</form></html></body>"
-                self.wfile.write(output)
-                return
-            if self.path.endswith("/edit"):
-                restaurantIDPath = self.path.split("/")[2]
-                myRestaurantQuery = session.query(Restaurant).filter_by(
-                    id=restaurantIDPath).one()
-                if myRestaurantQuery:
-                    self.send_response(200)
-                    self.send_header('Content-type', 'text/html')
-                    self.end_headers()
-                    output = "<html><body>"
-                    output += "<h1>"
-                    output += myRestaurantQuery.name
-                    output += "</h1>"
-                    output += "<form method='POST' enctype='multipart/form-data' action = '/restaurants/%s/edit' >" % restaurantIDPath
-                    output += "<input name = 'newRestaurantName' type='text' placeholder = '%s' >" % myRestaurantQuery.name
-                    output += "<input type = 'submit' value = 'Rename'>"
-                    output += "</form>"
-                    output += "</body></html>"
-
-                    self.wfile.write(output)
-            if self.path.endswith("/delete"):
-                restaurantIDPath = self.path.split("/")[2]
-
-                myRestaurantQuery = session.query(Restaurant).filter_by(
-                    id=restaurantIDPath).one()
-                if myRestaurantQuery:
-                    self.send_response(200)
-                    self.send_header('Content-type', 'text/html')
-                    self.end_headers()
-                    output = ""
-                    output += "<html><body>"
-                    output += "<h1>Are you sure you want to delete %s?" % myRestaurantQuery.name
-                    output += "<form method='POST' enctype = 'multipart/form-data' action = '/restaurants/%s/delete'>" % restaurantIDPath
-                    output += "<input type = 'submit' value = 'Delete'>"
-                    output += "</form>"
-                    output += "</body></html>"
-                    self.wfile.write(output)
-
-            if self.path.endswith("/restaurants"):
-                restaurants = session.query(Restaurant).all()
-                output = ""
-                # Objective 3 Step 1 - Create a Link to create a new menu item
-                output += "<a href = '/restaurants/new' > Make a New Restaurant Here </a></br></br>"
-
-                self.send_response(200)
-                self.send_header('Content-type', 'text/html')
-                self.end_headers()
-                output += "<html><body>"
-                for restaurant in restaurants:
-                    output += restaurant.name
-                    output += "</br>"
-                    # Objective 2 -- Add Edit and Delete Links
-                    # Objective 4 -- Replace Edit href
-
-                    output += "<a href ='/restaurants/%s/edit' >Edit </a> " % restaurant.id
-                    output += "</br>"
-                    # Objective 5 -- Replace Delete href
-                    output += "<a href ='/restaurants/%s/delete'> Delete </a>" % restaurant.id
-                    output += "</br></br></br>"
-
-                output += "</body></html>"
-                self.wfile.write(output)
-                return
-        except IOError:
-            self.send_error(404, 'File Not Found: %s' % self.path)
-
-    # Objective 3 Step 3- Make POST method
-    def do_POST(self):
-        try:
-            if self.path.endswith("/delete"):
-                restaurantIDPath = self.path.split("/")[2]
-                myRestaurantQuery = session.query(Restaurant).filter_by(
-                    id=restaurantIDPath).one()
-                if myRestaurantQuery:
-                    session.delete(myRestaurantQuery)
-                    session.commit()
-                    self.send_response(301)
-                    self.send_header('Content-type', 'text/html')
-                    self.send_header('Location', '/restaurants')
-                    self.end_headers()
-
-            if self.path.endswith("/edit"):
-                ctype, pdict = cgi.parse_header(
-                    self.headers.getheader('content-type'))
-                if ctype == 'multipart/form-data':
-                    fields = cgi.parse_multipart(self.rfile, pdict)
-                    messagecontent = fields.get('newRestaurantName')
-                    restaurantIDPath = self.path.split("/")[2]
-
-                    myRestaurantQuery = session.query(Restaurant).filter_by(
-                        id=restaurantIDPath).one()
-                    if myRestaurantQuery != []:
-                        myRestaurantQuery.name = messagecontent[0]
-                        session.add(myRestaurantQuery)
-                        session.commit()
-                        self.send_response(301)
-                        self.send_header('Content-type', 'text/html')
-                        self.send_header('Location', '/restaurants')
-                        self.end_headers()
-
-            if self.path.endswith("/restaurants/new"):
-                ctype, pdict = cgi.parse_header(
-                    self.headers.getheader('content-type'))
-                if ctype == 'multipart/form-data':
-                    fields = cgi.parse_multipart(self.rfile, pdict)
-                    messagecontent = fields.get('newRestaurantName')
-
-                    # Create new Restaurant Object
-                    newRestaurant = Restaurant(name=messagecontent[0])
-                    session.add(newRestaurant)
-                    session.commit()
-
-                    self.send_response(301)
-                    self.send_header('Content-type', 'text/html')
-                    self.send_header('Location', '/restaurants')
-                    self.end_headers()
-
-        except:
-            pass
+@app.route('/')
+@app.route('/restaurants/<int:restaurant_id>/menu')
+def restaurantMenu(restaurant_id):
+    restaurant = session.query(Restaurant).filter_by(id=restaurant_id).one()
+    items = session.query(MenuItem).filter_by(restaurant_id=restaurant_id)
+    return render_template(
+        'menu.html', restaurant=restaurant, items=items, restaurant_id=restaurant_id)
 
 
-def main():
-    try:
-        server = HTTPServer(('', 8080), webServerHandler)
-        print 'Web server running...open localhost:8080/restaurants in your browser'
-        server.serve_forever()
-    except KeyboardInterrupt:
-        print '^C received, shutting down server'
-        server.socket.close()
+@app.route('/restaurants/<int:restaurant_id>/new', methods=['GET', 'POST'])
+def newMenuItem(restaurant_id):
+
+    if request.method == 'POST':
+        newItem = MenuItem(name=request.form['name'], description=request.form[
+                           'description'], price=request.form['price'], course=request.form['course'], restaurant_id=restaurant_id)
+        session.add(newItem)
+        session.commit()
+        flash("new menu item created!")
+        return redirect(url_for('restaurantMenu', restaurant_id=restaurant_id))
+    else:
+        return render_template('newmenuitem.html', restaurant_id=restaurant_id)
+
+
+@app.route('/restaurants/<int:restaurant_id>/<int:menu_id>/edit',
+           methods=['GET', 'POST'])
+def editMenuItem(restaurant_id, menu_id):
+    editedItem = session.query(MenuItem).filter_by(id=menu_id).one()
+    if request.method == 'POST':
+        if request.form['name']:
+            editedItem.name = request.form['name']
+        session.add(editedItem)
+        session.commit()
+        flash("Menu Item has been edited")
+        return redirect(url_for('restaurantMenu', restaurant_id=restaurant_id))
+    else:
+        return render_template(
+            'editmenuitem.html', restaurant_id=restaurant_id, menu_id=menu_id, item=editedItem)
+
+
+# DELETE MENU ITEM SOLUTION
+@app.route('/restaurants/<int:restaurant_id>/<int:menu_id>/delete',
+           methods=['GET', 'POST'])
+def deleteMenuItem(restaurant_id, menu_id):
+    itemToDelete = session.query(MenuItem).filter_by(id=menu_id).one()
+    if request.method == 'POST':
+        session.delete(itemToDelete)
+        session.commit()
+        flash("Menu Item has been deleted")
+        return redirect(url_for('restaurantMenu', restaurant_id=restaurant_id))
+    else:
+        return render_template('deleteconfirmation.html', item=itemToDelete)
 
 
 if __name__ == '__main__':
-    main()
+    app.secret_key = 'super_secret_key'
+    app.debug = True
+    app.run(host='0.0.0.0', port=5000)
