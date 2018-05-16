@@ -5,7 +5,7 @@ from database_setup import Base, Restaurant, MenuItem
 
 app = Flask(__name__)
 
-eengine = create_engine('postgresql://catalog:rahulkathuriad@localhost/catalog')
+eengine = create_engine('postgresql://catalog:rahulkathuria@localhost/catalog')
 Base.metadata.bind = engine
 
 DBSession = sessionmaker(bind=engine)
